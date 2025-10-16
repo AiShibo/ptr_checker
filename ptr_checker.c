@@ -24,7 +24,7 @@ ssize_t write(int fd, const void *buf, size_t nbytes) {
 
 ssize_t sendmsg(int fd, const struct msghdr *msg, int flags) {
 	if (msg && msg->msg_iov) {
-		size_t iov_idx;
+		int iov_idx;
 		for (iov_idx = 0; iov_idx < msg->msg_iovlen; iov_idx++) {
 			check_pointers_with_vm_print(msg->msg_iov[iov_idx].iov_base,
 			                             msg->msg_iov[iov_idx].iov_len);

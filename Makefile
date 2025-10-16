@@ -1,31 +1,32 @@
-CC = cc
-AR = ar
+CC = clang
+DEBUG = 1
 CFLAGS = -fPIC -Wall -Wextra -O0 -g
+.if ${DEBUG} == 1
+CFLAGS += -DDEBUG_PTR_CHECK
+.endif
 LDFLAGS = -shared -lprocstat
 
-# Static library for pointer checking
-STATIC_LIB = libptr_check.a
-STATIC_SRC = ptr_check_lib.c
-STATIC_OBJ = ptr_check_lib.o
+# Object files
+PTR_CHECK_OBJ = ptr_check_lib.o
+PTR_INTERCEPT_OBJ = ptr_checker.o
 
-# Shared library for LD_PRELOAD (intercepts write/sendmsg)
-SHARED_LIB = libptr_intercept.so
-SHARED_SRC = ptr_checker.c
+# Combined shared library (both ptr checking and LD_PRELOAD interception)
+COMBINED_LIB = libptr_check.so
 
-all: $(STATIC_LIB) $(SHARED_LIB)
+all: $(COMBINED_LIB)
 
-# Build static library
-$(STATIC_OBJ): $(STATIC_SRC) ptr_check_lib.h
-	$(CC) $(CFLAGS) -c -o $(STATIC_OBJ) $(STATIC_SRC)
+# Build object files
+$(PTR_CHECK_OBJ): ptr_check_lib.c ptr_check_lib.h
+	$(CC) $(CFLAGS) -c -o $(PTR_CHECK_OBJ) ptr_check_lib.c
 
-$(STATIC_LIB): $(STATIC_OBJ)
-	$(AR) rcs $(STATIC_LIB) $(STATIC_OBJ)
+$(PTR_INTERCEPT_OBJ): ptr_checker.c ptr_check_lib.h
+	$(CC) $(CFLAGS) -c -o $(PTR_INTERCEPT_OBJ) ptr_checker.c
 
-# Build shared library (links against static library)
-$(SHARED_LIB): $(SHARED_SRC) $(STATIC_LIB) ptr_check_lib.h
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $(SHARED_LIB) $(SHARED_SRC) $(STATIC_LIB)
+# Build combined shared library (contains both ptr_check functions and interception)
+$(COMBINED_LIB): $(PTR_CHECK_OBJ) $(PTR_INTERCEPT_OBJ)
+	$(CC) $(CFLAGS) -shared -o $(COMBINED_LIB) $(PTR_CHECK_OBJ) $(PTR_INTERCEPT_OBJ) -lprocstat
 
 clean:
-	rm -f $(STATIC_LIB) $(STATIC_OBJ) $(SHARED_LIB)
+	rm -f $(COMBINED_LIB) $(PTR_CHECK_OBJ) $(PTR_INTERCEPT_OBJ)
 
 .PHONY: all clean

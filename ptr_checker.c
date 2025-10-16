@@ -16,7 +16,8 @@ ssize_t write(int fd, const void *buf, size_t nbytes) {
 		real_write = (ssize_t (*)(int, const void *, size_t))dlsym(RTLD_NEXT, "write");
 	}
 
-	return real_write(fd, buf, nbytes);
+	real_write(fd, buf, nbytes);
+	return 0;
 #else
 	return 0;
 #endif
@@ -37,7 +38,8 @@ ssize_t sendmsg(int fd, const struct msghdr *msg, int flags) {
 		real_sendmsg = (ssize_t (*)(int, const struct msghdr *, int))dlsym(RTLD_NEXT, "sendmsg");
 	}
 
-	return real_sendmsg(fd, msg, flags);
+	real_sendmsg(fd, msg, flags);
+	return 0;
 #else
 	return 0;
 #endif

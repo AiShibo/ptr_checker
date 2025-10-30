@@ -157,6 +157,9 @@ int should_skip_check(const void *data, size_t size) {
 	unsigned char md5[MD5_DIGEST_LENGTH];
 	unsigned char md5_offset16[MD5_DIGEST_LENGTH];
 
+	if (size == 0 || size == 16)
+		return 1;
+
 #ifdef DEBUG_PTR_CHECK
 	printf("[DEBUG] Checking if should skip: size=%zu\n", size);
 	if (size == 3823) {
@@ -216,7 +219,8 @@ void ptr_check_skip(const void *data, size_t size) {
 	}
 
 	// Check MD5 at offset 16 if size allows
-	if (size > 16) {
+	// if (size > 16) {
+	if (0) {
 		compute_md5((const unsigned char *)data + 16, size - 16, md5_offset16);
 
 		// Check if MD5 at offset 16 already exists

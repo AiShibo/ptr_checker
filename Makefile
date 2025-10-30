@@ -4,7 +4,7 @@ CFLAGS = -fPIC -Wall -Wextra -O0 -g
 .if ${DEBUG} == 1
 CFLAGS += -DDEBUG_PTR_CHECK
 .endif
-LDFLAGS = -shared -lprocstat
+LDFLAGS = -shared -lprocstat -lmd
 
 # Object files
 PTR_CHECK_OBJ = ptr_check_lib.o
@@ -24,7 +24,7 @@ $(PTR_INTERCEPT_OBJ): ptr_checker.c ptr_check_lib.h
 
 # Build combined shared library (contains both ptr_check functions and interception)
 $(COMBINED_LIB): $(PTR_CHECK_OBJ) $(PTR_INTERCEPT_OBJ)
-	$(CC) $(CFLAGS) -shared -o $(COMBINED_LIB) $(PTR_CHECK_OBJ) $(PTR_INTERCEPT_OBJ) -lprocstat
+	$(CC) $(CFLAGS) -shared -o $(COMBINED_LIB) $(PTR_CHECK_OBJ) $(PTR_INTERCEPT_OBJ) -lprocstat -lmd
 
 clean:
 	rm -f $(COMBINED_LIB) $(PTR_CHECK_OBJ) $(PTR_INTERCEPT_OBJ)

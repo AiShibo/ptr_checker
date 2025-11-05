@@ -1,8 +1,11 @@
 CC = clang
 DEBUG = 1
-CFLAGS = -fPIC -Wall -Wextra -O0 -g
+
+CFLAGS = -fPIC -Wall -Wextra -O0 -g -DINTERCEPT_IMSG
 .if ${DEBUG} == 1
 CFLAGS += -DDEBUG_PTR_CHECK
+CFLAGS += -fsanitize-recover=memory
+
 .endif
 LDFLAGS = -shared -lprocstat -lmd
 

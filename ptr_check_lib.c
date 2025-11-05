@@ -157,6 +157,10 @@ int should_skip_check(const void *data, size_t size) {
 	unsigned char md5[MD5_DIGEST_LENGTH];
 	unsigned char md5_offset16[MD5_DIGEST_LENGTH];
 
+	// Temp disable all ptr checks
+	// return 1;
+
+
 	if (size == 0 || size == 16)
 		return 1;
 
@@ -289,8 +293,8 @@ void check_pointers(const void *data, size_t size) {
 		vm_region *region = proc_vm;
 		while (region != NULL) {
 			if (potential_ptr >= region->start && potential_ptr < region->end) {
-				printf("POINTER DETECTED at offset %zu: 0x%lx (in region %lx-%lx), message size iis %zu\n",
-				       i, potential_ptr, region->start, region->end, size);
+				printf("POINTER DETECTED in memory location %p at offset %zu with value 0x%lx (in region %lx-%lx), message size iis %zu\n",
+				       (uint64_t *)(bytes + i), i, potential_ptr, region->start, region->end, size);
 				free_vm();
 				raise(SIGBUS);
 			}
@@ -329,8 +333,8 @@ void check_pointers_with_vm_print(const void *data, size_t size) {
 		vm_region *region = proc_vm;
 		while (region != NULL) {
 			if (potential_ptr >= region->start && potential_ptr < region->end) {
-				printf("POINTER DETECTED at offset %zu: 0x%lx (in region %lx-%lx), message size iis %zu\n",
-				       i, potential_ptr, region->start, region->end, size);
+				printf("POINTER DETECTED in memory location %p at offset %zu with value 0x%lx (in region %lx-%lx), message size iis %zu\n",
+				       (uint64_t *)(bytes + i), i, potential_ptr, region->start, region->end, size);
 				free_vm();
 				raise(SIGBUS);
 			}

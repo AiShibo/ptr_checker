@@ -1,5 +1,5 @@
-#ifndef PTR_CHECK_LIB_H
-#define PTR_CHECK_LIB_H
+#ifndef BUFFER_CHECK_LIB_H
+#define BUFFER_CHECK_LIB_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -21,7 +21,7 @@ void ptr_check_skip(const void *data, size_t size);
 
 /**
  * Check if the provided data buffer contains any pointers to valid memory regions.
- * If a pointer is detected, the function will print a message and raise SIGSEGV.
+ * If a pointer is detected, the function will print a message and raise SIGBUS.
  *
  * Messages can be excluded from checking by calling ptr_check_skip() beforehand.
  *
@@ -31,15 +31,29 @@ void ptr_check_skip(const void *data, size_t size);
 void check_pointers(const void *data, size_t size);
 
 /**
- * Check if the provided data buffer contains any pointers to valid memory regions,
- * with VM region information printed to stdout.
- * If a pointer is detected, the function will print a message and raise SIGSEGV.
+ * Check if the provided data buffer contains uninitialized memory via MSAN.
+ * If uninitialized memory is detected, a warning is printed and SIGBUS is raised.
  *
- * Messages can be excluded from checking by calling ptr_check_skip() beforehand.
+ * Note: This function only performs MSAN checks. To also check for pointers,
+ * call check_pointers() separately or use check_buffer().
  *
  * @param data Pointer to the data buffer to check
  * @param size Size of the data buffer in bytes
  */
-void check_pointers_with_vm_print(const void *data, size_t size);
+void check_buffer_with_msan(const void *data, size_t size);
 
-#endif /* PTR_CHECK_LIB_H */
+/**
+ * Perform both MSAN and pointer checks on the provided data buffer.
+ * This function first checks for uninitialized memory (if ENABLE_MSAN_CHECK is set),
+ * then checks for pointer leaks (if ENABLE_PTR_CHECK is set).
+ *
+ * If issues are detected, appropriate messages are printed and SIGBUS may be raised.
+ *
+ * Messages can be excluded from pointer checking by calling ptr_check_skip() beforehand.
+ *
+ * @param data Pointer to the data buffer to check
+ * @param size Size of the data buffer in bytes
+ */
+void check_buffer(const void *data, size_t size);
+
+#endif /* BUFFER_CHECK_LIB_H */

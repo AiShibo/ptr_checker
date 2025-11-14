@@ -27,37 +27,31 @@ struct imsgbuf {
 	int			 flags;
 };
 
-/*
+#ifdef INTERCEPT_WRITE
 ssize_t write(int fd, const void *buf, size_t nbytes) {
-	int unint_location;
+	check_buffer(buf, nbytes);
 
-	if ((unint_location = safe_msan_test_shadow(buf, nbytes)) != -1) {
-		printf("intercepting write, sending a buffer contains unitialized memory! message len is %zu, unint location is %d\n", nbytes, unint_location);
-		// raise(SIGBUS);
-	}
-
-	check_pointers_with_vm_print(buf, nbytes);
-
-#if 1
 	static ssize_t (*real_write)(int, const void *, size_t) = NULL;
 	if (!real_write) {
 		real_write = (ssize_t (*)(int, const void *, size_t))dlsym(RTLD_NEXT, "write");
 	}
 
 	return real_write(fd, buf, nbytes);
-#else
-	return 0;
-#endif
 }
-*/
+#endif
 
 #ifdef INTERCEPT_SENDMSG
 ssize_t sendmsg(int fd, const struct msghdr *msg, int flags) {
+	printf("intercepting sendmsg!!!\n");
 	if (msg && msg->msg_iov) {
 		int iov_idx;
 		for (iov_idx = 0; iov_idx < msg->msg_iovlen; iov_idx++) {
-			check_buffer(msg->msg_iov[iov_idx].iov_base,
-			             msg->msg_iov[iov_idx].iov_len);
+			if (msg->msg_iov[iov_idx].iov_len > 16) {
+				check_buffer(msg->msg_iov[iov_idx].iov_base + 16,
+			             msg->msg_iov[iov_idx].iov_len - 16);
+			} else {
+				printf("payload size is %zu smaller than 16, skip msan checks!", msg->msg_iov[iov_idx].iov_len);
+			}
 		}
 	}
 
@@ -104,5 +98,20 @@ imsg_composev(struct imsgbuf *imsgbuf, uint32_t type, uint32_t id, pid_t pid, in
 	}
 
 	return real_imsg_composev(imsgbuf, type, id, pid, fd, iov, iovcnt);
+}
+#endif
+
+#ifdef INTERCEPT_MUST_WRITE
+void
+must_write(int fd, const void *buf, size_t n)
+{
+	check_buffer(buf, n);
+
+	static void (*real_must_write)(int, const void *, size_t) = NULL;
+	if (!real_must_write) {
+		real_must_write = (void (*)(int, const void *, size_t))dlsym(RTLD_NEXT, "must_write");
+	}
+
+	real_must_write(fd, buf, n);
 }
 #endif

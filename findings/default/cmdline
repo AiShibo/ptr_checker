@@ -1,4 +1,0 @@
-./httpd
--d
--f
-./httpd.conf

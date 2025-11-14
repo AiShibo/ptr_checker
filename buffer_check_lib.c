@@ -253,6 +253,9 @@ void ptr_check_skip(const void *data, size_t size) {
 void check_pointers(const void *data, size_t size) {
 	int get_vm_ret;
 
+	if (data == NULL)
+		return;
+
 	// Check if this message should be skipped
 	if (should_skip_check(data, size)) {
 		return;

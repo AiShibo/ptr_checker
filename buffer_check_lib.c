@@ -14,6 +14,7 @@
 #include "buffer_check_lib.h"
 
 static void debug_print(int indent_level, const char *format, ...) {
+	return;
 	va_list args;
 	printf("[DEBUG] ");
 	for (int i = 0; i < indent_level; i++) {
@@ -156,13 +157,12 @@ int check_skip_list(const unsigned char *md5) {
 
 int should_skip_check(const void *data, size_t size) {
 	unsigned char md5[MD5_DIGEST_LENGTH];
-	unsigned char md5_offset16[MD5_DIGEST_LENGTH];
 
 	// Temp disable all ptr checks
 	// return 1;
 
 
-	if (size == 0 || size == 16)
+	if (size == 0)
 		return 1;
 
 	debug_print(0, "Checking if should skip: size=%zu\n", size);
@@ -181,26 +181,12 @@ int should_skip_check(const void *data, size_t size) {
 		return 1;
 	}
 
-	// Check MD5 starting at offset 16 (for imsg header)
-	if (size > 16) {
-		compute_md5((const unsigned char *)data + 16, size - 16, md5_offset16);
-		debug_print(0, "  MD5 at offset 16: ");
-		print_md5(md5_offset16);
-		debug_print(0, "\n");
-
-		if (check_skip_list(md5_offset16)) {
-			debug_print(0, "  SKIP: Matched at offset 16\n");
-			return 1;
-		}
-	}
-
 	debug_print(0, "  NO SKIP: No match found\n");
 	return 0;
 }
 
 void ptr_check_skip(const void *data, size_t size) {
 	unsigned char md5[MD5_DIGEST_LENGTH];
-	unsigned char md5_offset16[MD5_DIGEST_LENGTH];
 
 	// Compute MD5 at offset 0
 	compute_md5(data, size, md5);
@@ -209,18 +195,6 @@ void ptr_check_skip(const void *data, size_t size) {
 	if (check_skip_list(md5)) {
 		debug_print(0, "Not adding to skip list: MD5 at offset 0 already exists\n");
 		return;
-	}
-
-	// Check MD5 at offset 16 if size allows
-	// if (size > 16) {
-	if (0) {
-		compute_md5((const unsigned char *)data + 16, size - 16, md5_offset16);
-
-		// Check if MD5 at offset 16 already exists
-		if (check_skip_list(md5_offset16)) {
-			debug_print(0, "Not adding to skip list: MD5 at offset 16 already exists\n");
-			return;
-		}
 	}
 
 	// No overlap found, add new entry

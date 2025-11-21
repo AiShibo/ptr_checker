@@ -1,0 +1,213 @@
+First, the library should know every piece of information about the program interface that it needs:
+
+1. all the compartments
+	> not just how many of them, also should include their concrete values, i.e. the type
+
+2. The message format. is it imsg or some custom format
+	> if custom, how big is the header, any additional fields?
+
+3. the library should also know the fd for the fuzzer input
+
+potential problem:
+1. each application can have diffent functions to send out messages, or even
+   having dedicated functions to send out file descriptors. How should us
+   handle this information?
+
+thoughts:
+- Can we extract the message to be sent in each payload as a structure,
+  while the library, at this step, do not need to worry about how to send
+  out the message. Sending a message is the messy part as it involves
+  a lot of function-specific.
+
+- I think the above should at least a part of design philosophy. even the library
+  handles more than that, it should based on that.
+
+What should the struct include:
+- Actually, we should design it as two structures, with the first structure describes
+  the metadata about the interface itself, such as what are all the compartments, and
+  the other struct describes a single message.
+
+- We should provide functions that generate these structs. i.e. a function that generates
+  a message.
+
+
+Other functionalities:
+
+- Should have EOM support
+
+Design requirements:
+
+- Even the library is subject to changes, such as also reading fd data from the fuzzer
+  input, it should have source-level compatability with previous versions
+
+- Therefore, the interface should be generic
+
+- It should be a statically linked library due to binary incompatability.
+
+Metadata decisions:
+
+- number should be interpreted as-is, i.e. no endian flipping
+- maximum message length 65535, should set this value to a Macro
+- maximum number of messages: 1024, should also set this to a Macro
+
+metadata:
+- compartment number
+- message type
+- message size
+- fd-related
+	- have fd?
+	- fd permission (read/write/both)
+	- fd data len
+
+what should be stored in message struct
+- all the metadata
+- message payload
+- fd payload
+- *also the endpoint* as a void*
+
+what should be stored in the interface-metadata stricture
+- the mapping of the message type to the actual value in the message
+	> i.e. if not starting from 0, the first message's actual enum value is ???
+- all the message endpoints
+- the fd for fuzzer input
+
+How should we tell the library user "this is the end"
+- through return value
+- the simuation maybe "the are no more data to generate the complete message 
+requested by the fuzzer, I will only output a incomplete data, but I know next 
+time the user request for another message will fail because there are no more
+data to read. however, in such senatio, the function should still return
+success and only fail if being called next time.
+
+claude: you need to help me building a library that this. The above are my brainstorms, and you need to help me impklement this.
+The library is about generating inter-compartment messages that the following code does:
+
+ 329     struct imsgbuf server_ibuf;
+ 330     int server_fd = ps->ps_pipes[PROC_SERVER][0].pp_pipes[PROC_PARENT][0];
+ 331     imsg_init(&server_ibuf, server_fd);
+ 332
+ 333     struct imsgbuf logger_ibuf;
+ 334     int logger_fd = ps->ps_pipes[PROC_LOGGER][0].pp_pipes[PROC_PARENT][0];
+ 335     imsg_init(&logger_ibuf, logger_fd);
+ 336
+ 337
+ 338     while(1) {
+ 339         uint8_t compartment; // value is 1, 2
+ 340         uint8_t instance; // reserved, dont use it
+ 341         uint8_t type; // max value 63, smallest value 0, so [0-63]
+ 342         uint16_t size;
+ 343
+ 344         char payload[65535];
+ 345         uint16_t payload_size;
+ 346
+ 347         /* Populate the four fields using get_metadata function */
+ 348         if (get_metadata(&compartment, &instance, &type, &size) != 0) {
+ 349             break;
+ 350         }
+ 351
+ 352         size = size % 8192;
+ 353
+ 354         /* Ensure values are within valid ranges */
+ 355         compartment = (compartment % 2) + 1;  // values 1, 2, 3, 4
+ 356         type = type % 22;  // values 0-63
+ 357
+ 358         // Temp
+ 359         // type = 17;
+ 360         // compartment = 1;
+ 361
+ 362         /* Populate payload up to size bytes */
+ 363         payload_size = get_payload(size, payload);
+ 364
+ 365         /* Send message to appropriate compartment */
+ 366         struct imsgbuf *target_ibuf = NULL;
+ 367         switch (compartment) {
+ 368             case 1:
+ 369                 target_ibuf = &server_ibuf;
+ 370                 break;
+ 371             case 2:
+ 372                 target_ibuf = &logger_ibuf;
+ 373                 break;
+ 374         }
+ 375
+ 376         if (target_ibuf != NULL) {
+ 377             printf("compose! payload size is %lu, and compartment ID is %d, type is %d\n", payload_size, compartment, type);
+ 378             ptr_check_skip(payload, payload_size);
+ 379             imsg_compose(target_ibuf, type, 0, 0, -1, payload, payload_size);
+ 380             imsg_flush(target_ibuf);
+ 381         }
+ 382     }
+ 383
+ 384     imsg_compose(&server_ibuf, IMSG_EOM, 0, 0, -1, NULL, 0);
+ 385     imsg_compose(&logger_ibuf, IMSG_EOM, 0, 0, -1, NULL, 0);
+ 386     imsg_flush(&server_ibuf);
+ 387     imsg_flush(&logger_ibuf);
+ 388
+ 389
+ 390
+ 391
+ 392     ///////
+ 393
+ 394     event_dispatch();
+ 395
+ 396     parent_shutdown(env);
+ 397     /* NOTREACHED */
+ 398
+ 399     return (0);
+
+ 121 size_t
+ 122 get_payload(uint16_t size, char *buf)
+ 123 {
+ 124     ssize_t bytes_read;
+ 125     size_t total_read = 0;
+ 126
+ 127     while (total_read < size) {
+ 128         bytes_read = read(STDIN_FILENO, buf + total_read, size - total_read);
+ 129         if (bytes_read <= 0) {
+ 130             break;
+ 131         }
+ 132         total_read += bytes_read;
+ 133     }
+ 134
+ 135     return total_read;
+ 136 }
+ 137
+ 138
+ 139 int
+ 140 get_metadata(uint8_t* compartment, uint8_t* instance, uint8_t* type, uint16_t* size)
+ 141 {
+ 142     ssize_t bytes_read;
+ 143
+ 144     /* Read compartment (1 byte) */
+ 145     bytes_read = read(STDIN_FILENO, compartment, sizeof(uint8_t));
+ 146     if (bytes_read != sizeof(uint8_t)) {
+ 147         return 1;
+ 148     }
+ 149
+ 150     /* Read instance (1 byte) */
+ 151     bytes_read = read(STDIN_FILENO, instance, sizeof(uint8_t));
+ 152     if (bytes_read != sizeof(uint8_t)) {
+ 153         return 1;
+ 154     }
+ 155
+ 156     /* Read type (1 byte) */
+ 157     bytes_read = read(STDIN_FILENO, type, sizeof(uint8_t));
+ 158     if (bytes_read != sizeof(uint8_t)) {
+ 159         return 1;
+ 160     }
+ 161
+ 162     /* Read size (2 bytes) */
+ 163     bytes_read = read(STDIN_FILENO, size, sizeof(uint16_t));
+ 164     if (bytes_read != sizeof(uint16_t)) {
+ 165         return 1;
+ 166     }
+ 167
+ 168     return 0;
+ 169 }
+
+when I say communication endpoints, I mean the imsgbuf structs. However, you should store this as a void* because there might be other types.
+
+the above code is missing a critical part, that is  the fd part/ notice in tthe metadata. notice the metadata only contains 4 fields. however, we add more, which
+sometime we also send a fd as well, so you should have a field controlling if the message would contain fd, and next field determining the property of fd (read, write, both) and
+the final field the length of data we send via that fd.
+
+your implementation should be step by step, ignore the Makefile for now and first get the header files done (including the two critical structs) and implementation.;

@@ -47,10 +47,12 @@ ssize_t sendmsg(int fd, const struct msghdr *msg, int flags) {
 		int iov_idx;
 		for (iov_idx = 0; iov_idx < msg->msg_iovlen; iov_idx++) {
 			if (msg->msg_iov[iov_idx].iov_len > 16) {
+				if (msg->msg_iov[iov_idx].iov_len - 16 == 248)
+					printf("I found it!!!!!!!!!!!!!\n");
 				check_buffer(msg->msg_iov[iov_idx].iov_base + 16,
 			             msg->msg_iov[iov_idx].iov_len - 16);
 			} else {
-				printf("payload size is %zu smaller than 16, skip msan checks!", msg->msg_iov[iov_idx].iov_len);
+				// printf("payload size is %zu smaller than 16, skip msan checks!", msg->msg_iov[iov_idx].iov_len);
 			}
 		}
 	}

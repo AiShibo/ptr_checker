@@ -4,13 +4,13 @@ CC = clang
 # Set to 1 to enable, 0 to disable. Override on command line: make OPTION=0
 
 # DEBUG: Enable debug output and verbose logging
-DEBUG = 0
+DEBUG = 1
 
 ################### Sould we check only MSAN? PTR? or both? ###################
 
 # ENABLE_PTR_CHECK: Enable pointer leak detection
 # Scans buffers for values that fall within process virtual memory regions
-ENABLE_PTR_CHECK = 1
+ENABLE_PTR_CHECK = 0 # for rpki-client, no ASLR
 
 # ENABLE_MSAN_CHECK: Enable MemorySanitizer checks for uninitialized memory
 # Requires linking with -fsanitize=memory for full functionality
@@ -76,14 +76,15 @@ LDFLAGS = -shared -lprocstat -lmd
 BUFFER_CHECK_OBJ = buffer_check_lib.o
 BUFFER_INTERCEPT_OBJ = buffer_checker.o
 EOM_COUNTER_OBJ = eom_counter.o
+MSG_GENERATOR_OBJ = msg_generator.o
 
 # Combined shared library (both buffer checking and LD_PRELOAD interception)
 COMBINED_LIB = libbuffer_check.so
 
-# Separate EOM counter library
-EOM_COUNTER_LIB = libeom_counter.so
+# Message generator static library (includes EOM counter functionality)
+MSG_GENERATOR_LIB = libmsg_generator.a
 
-all: $(COMBINED_LIB) $(EOM_COUNTER_LIB)
+all: $(COMBINED_LIB) $(MSG_GENERATOR_LIB)
 
 # Build object files
 $(BUFFER_CHECK_OBJ): buffer_check_lib.c buffer_check_lib.h
@@ -95,15 +96,18 @@ $(BUFFER_INTERCEPT_OBJ): buffer_checker.c buffer_check_lib.h
 $(EOM_COUNTER_OBJ): eom_counter.c eom_counter.h
 	$(CC) $(CFLAGS) -c -o $(EOM_COUNTER_OBJ) eom_counter.c
 
+$(MSG_GENERATOR_OBJ): msg_generator.c msg_generator.h
+	$(CC) $(CFLAGS) -c -o $(MSG_GENERATOR_OBJ) msg_generator.c
+
 # Build combined shared library (contains buffer_check, interception, and eom_counter)
 $(COMBINED_LIB): $(BUFFER_CHECK_OBJ) $(BUFFER_INTERCEPT_OBJ) $(EOM_COUNTER_OBJ)
 	$(CC) $(CFLAGS) -shared -o $(COMBINED_LIB) $(BUFFER_CHECK_OBJ) $(BUFFER_INTERCEPT_OBJ) $(EOM_COUNTER_OBJ) -lprocstat -lmd
 
-# Build separate EOM counter shared library
-$(EOM_COUNTER_LIB): $(EOM_COUNTER_OBJ)
-	$(CC) $(CFLAGS) -shared -o $(EOM_COUNTER_LIB) $(EOM_COUNTER_OBJ)
+# Build message generator static library
+$(MSG_GENERATOR_LIB): $(MSG_GENERATOR_OBJ)
+	ar rcs $(MSG_GENERATOR_LIB) $(MSG_GENERATOR_OBJ)
 
 clean:
-	rm -f $(COMBINED_LIB) $(EOM_COUNTER_LIB) $(BUFFER_CHECK_OBJ) $(BUFFER_INTERCEPT_OBJ) $(EOM_COUNTER_OBJ)
+	rm -f $(COMBINED_LIB) $(MSG_GENERATOR_LIB) $(BUFFER_CHECK_OBJ) $(BUFFER_INTERCEPT_OBJ) $(EOM_COUNTER_OBJ) $(MSG_GENERATOR_OBJ)
 
 .PHONY: all clean

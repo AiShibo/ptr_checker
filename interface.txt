@@ -1,0 +1,80 @@
+First, the library should know every piece of information about the program interface that it needs:
+
+1. all the compartments
+	> not just how many of them, also should include their concrete values, i.e. the type
+
+2. The message format. is it imsg or some custom format
+	> if custom, how big is the header, any additional fields?
+
+3. the library should also know the fd for the fuzzer input
+
+potential problem:
+1. each application can have diffent functions to send out messages, or even
+   having dedicated functions to send out file descriptors. How should us
+   handle this information?
+
+thoughts:
+- Can we extract the message to be sent in each payload as a structure,
+  while the library, at this step, do not need to worry about how to send
+  out the message. Sending a message is the messy part as it involves
+  a lot of function-specific.
+
+- I think the above should at least a part of design philosophy. even the library
+  handles more than that, it should based on that.
+
+What should the struct include:
+- Actually, we should design it as two structures, with the first structure describes
+  the metadata about the interface itself, such as what are all the compartments, and
+  the other struct describes a single message.
+
+- We should provide functions that generate these structs. i.e. a function that generates
+  a message.
+
+
+Other functionalities:
+
+- Should have EOM support
+
+Design requirements:
+
+- Even the library is subject to changes, such as also reading fd data from the fuzzer
+  input, it should have source-level compatability with previous versions
+
+- Therefore, the interface should be generic
+
+- It should be a statically linked library due to binary incompatability.
+
+Metadata decisions:
+
+- number should be interpreted as-is, i.e. no endian flipping
+- maximum message length
+- maximum number of messages
+
+metadata:
+- compartment number
+- message type
+- message size
+- fd-related
+	- have fd?
+	- fd permission (read/write/both)
+	- fd data len
+
+what should be stored in message struct
+- all the metadata
+- message payload
+- fd payload
+- *also the endpoint* as a void*
+
+what should be stored in the interface-metadata stricture
+- the mapping of the message type to the actual value in the message
+	> i.e. if not starting from 0, the first message's actual enum value is ???
+- all the message endpoints
+- the fd for fuzzer input
+
+How should we tell the library user "this is the end"
+- through return value
+- the simuation maybe "the are no more data to generate the complete message 
+requested by the fuzzer, I will only output a incomplete data, but I know next 
+time the user request for another message will fail because there are no more
+data to read. however, in such senatio, the function should still return
+success and only fail if being called next time.

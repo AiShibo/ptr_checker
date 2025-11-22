@@ -628,3 +628,63 @@ The Message Generator Library (with integrated EOM support) abstracts away the c
 - Tracking received EOMs in receiving compartments
 
 This allows you to focus on the application logic rather than fuzzer input handling and process coordination.
+
+## Message Structure Diagram
+
+The following diagram shows how fuzzer input is interpreted as a message, from top to bottom:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         compartment (1 byte)                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                          instance (1 byte)                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                            type (1 byte)                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                            size (2 bytes)                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                           has_fd (1 byte)                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                          fd_perm (1 byte)                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                        fd_data_len (2 bytes)                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│                                                                     │
+│                       AUXILIARY DATA (64 bytes)                     │
+│                                                                     │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│                                                                     │
+│                                                                     │
+│                 MESSAGE PAYLOAD (0-65535 bytes)                     │
+│                          size: 'size'                               │
+│                                                                     │
+│                                                                     │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│                                                                     │
+│                                                                     │
+│            FILE DESCRIPTOR DATA (0-65535 bytes)                     │
+│                    size: 'fd_data_len'                              │
+│                   (only if has_fd == 1)                             │
+│                                                                     │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+Total Size: 73 + size + fd_data_len bytes
+
+Notes:
+- All multi-byte fields are in native byte order
+- Normalization happens after reading:
+  * compartment → compartment % num_compartments
+  * type → message_type_mapping[type % num_message_types]
+  * size → size % MAX_MESSAGE_LENGTH
+  * has_fd → has_fd % 2
+  * fd_perm → (fd_perm % 3) + 1
+  * fd_data_len → fd_data_len % MAX_MESSAGE_LENGTH
+- Auxiliary data is NOT normalized (fuzzer controls it directly)
+- If has_fd == 1, a UNIX socketpair is created with permissions from fd_perm
+```

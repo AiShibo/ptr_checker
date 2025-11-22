@@ -35,6 +35,10 @@ struct msg_data {
     uint8_t fd_perm;          /* FD permissions (read/write/both) */
     uint16_t fd_data_len;     /* Length of data to send via FD */
 
+    /* Auxiliary data - 64 bytes for additional metadata */
+    /* Can be used for pid, auxiliary IDs, or other non-payload data */
+    char aux_data[64];        /* Auxiliary data buffer (e.g., for pid, other IDs) */
+
     /* Payload data */
     char payload[MAX_MESSAGE_LENGTH];  /* Message payload buffer */
     uint16_t actual_payload_size;      /* Actual bytes read for payload */

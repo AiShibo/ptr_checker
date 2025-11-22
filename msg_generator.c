@@ -180,6 +180,17 @@ int msg_read_metadata(struct msg_interface *iface, struct msg_data *msg)
         return MSG_GEN_ERROR;
     }
 
+    /* Read auxiliary data (64 bytes) - must read all 64 bytes */
+    size_t aux_total_read = 0;
+    while (aux_total_read < 64) {
+        bytes_read = read(iface->fuzzer_fd, msg->aux_data + aux_total_read, 64 - aux_total_read);
+        if (bytes_read <= 0) {
+            /* Failed to read all 64 bytes - this is an error */
+            return MSG_GEN_ERROR;
+        }
+        aux_total_read += bytes_read;
+    }
+
     /* Normalize values using modulo for equal probability */
 
     /* Compartment: use modulo with num_compartments */

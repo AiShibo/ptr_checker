@@ -65,6 +65,9 @@ struct msg_data {
     uint8_t fd_perm;                        // 1=read, 2=write, 3=both (modulo 3 + 1)
     uint16_t fd_data_len;                   // FD data size (normalized)
 
+    // Auxiliary data
+    char aux_data[64];                      // 64 bytes for non-payload data (e.g., pid, IDs)
+
     // Payloads
     char payload[MAX_MESSAGE_LENGTH];       // Message payload
     uint16_t actual_payload_size;           // Actual bytes read
@@ -172,12 +175,13 @@ Generates a single message from fuzzer input.
 - `MSG_GEN_ERROR` - Error occurred
 
 **What it does**:
-1. Reads 9 bytes of metadata from fuzzer input
-2. Normalizes values using modulo
-3. Applies message type mapping
-4. Reads message payload
-5. If `has_fd=1`, reads FD data and creates a UNIX socketpair with proper permissions
-6. Populates `msg->endpoint` for the target compartment
+1. Reads 9 bytes of basic metadata from fuzzer input
+2. Reads 64 bytes of auxiliary data (fails if incomplete)
+3. Normalizes values using modulo
+4. Applies message type mapping
+5. Reads message payload
+6. If `has_fd=1`, reads FD data and creates a UNIX socketpair with proper permissions
+7. Populates `msg->endpoint` for the target compartment
 
 #### Generate EOM Message
 
@@ -352,13 +356,19 @@ while ((ret = msg_generate(&iface, &msg)) == MSG_GEN_SUCCESS) {
     struct imsgbuf *target_ibuf = (struct imsgbuf *)msg.endpoint;
 
     if (target_ibuf != NULL) {
+        /* Extract auxiliary data (e.g., pid and session ID) */
+        uint32_t *aux_pid = (uint32_t *)&msg.aux_data[0];
+        uint32_t *aux_session = (uint32_t *)&msg.aux_data[4];
+
         printf("compose! payload size is %u, compartment ID is %u, type is %u\n",
                msg.actual_payload_size, msg.compartment, msg.type);
+        printf("  aux data: pid=%u, session=%u\n", *aux_pid, *aux_session);
 
         ptr_check_skip(msg.payload, msg.actual_payload_size);
 
         /* Send message with or without FD */
-        imsg_compose(target_ibuf, msg.type, 0, 0,
+        /* Note: imsg_compose uses peerid parameter for pid, but aux_data can hold more */
+        imsg_compose(target_ibuf, msg.type, *aux_pid, *aux_session,
                      msg.has_fd ? msg.fd : -1,
                      msg.payload, msg.actual_payload_size);
         imsg_flush(target_ibuf);
@@ -458,7 +468,7 @@ void server_dispatch(struct imsg *imsg) {
 
 ## Fuzzer Input Format
 
-The library expects fuzzer input in this binary format (9 bytes metadata per message):
+The library expects fuzzer input in this binary format (73 bytes metadata per message):
 
 ```
 Offset | Size | Field        | Normalization
@@ -470,11 +480,40 @@ Offset | Size | Field        | Normalization
 5      | 1    | has_fd       | % 2 (0 or 1)
 6      | 1    | fd_perm      | (% 3) + 1 (1, 2, or 3)
 7      | 2    | fd_data_len  | % MAX_MESSAGE_LENGTH
+9      | 64   | aux_data     | Auxiliary data (no normalization)
 ```
+
+**Important**: The library **requires** all 64 bytes of auxiliary data to be present. If the full 64 bytes cannot be read, `msg_generate()` returns `MSG_GEN_ERROR`.
 
 Followed by:
 - `size` bytes of message payload
 - `fd_data_len` bytes of FD data (if `has_fd == 1`)
+
+### Auxiliary Data Usage
+
+The 64-byte `aux_data` buffer is intended for non-payload metadata that frameworks like `imsg` can send alongside messages. Common uses include:
+
+- **Process ID (pid)**: 4 bytes (uint32_t or pid_t)
+- **User/Group IDs**: 4-8 bytes each (uid_t, gid_t)
+- **Session IDs**: 4 bytes
+- **Custom application IDs**: Variable length
+- **Timestamps**: 8 bytes (uint64_t)
+- **Flags and control data**: 1-4 bytes
+
+**Example layout for imsg-style metadata**:
+```c
+struct aux_metadata {
+    uint32_t pid;           // Process ID (bytes 0-3)
+    uint32_t uid;           // User ID (bytes 4-7)
+    uint32_t gid;           // Group ID (bytes 8-11)
+    uint32_t session_id;    // Session ID (bytes 12-15)
+    char reserved[48];      // Reserved for future use (bytes 16-63)
+};
+
+// Access auxiliary data
+struct aux_metadata *aux = (struct aux_metadata *)msg.aux_data;
+printf("Message from pid %u\n", aux->pid);
+```
 
 ## Advanced Usage
 
